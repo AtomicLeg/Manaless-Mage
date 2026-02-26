@@ -213,14 +213,6 @@ class DarkMage(PhysicsEntity):
         else:
             self.set_action('idle')   
 
-    def render(self, surf, offset = (0,0)):
-        super().render(surf, offset =offset)   
-
-        if self.flip:
-            surf.blit(pygame.transform.flip(self.game.assets['EStaff'],True, False), (self.rect().centerx - 2 - self.game.assets['EStaff'].get_width() - offset[0], self.rect().centery - offset[1]))
-            #Test with the Numbers to adjust staff
-        else: 
-            surf.blit(self.game.assets['EStaff'], (self.rect().centerx + 2 - offset[0], self.rect().centery - offset[1]))
 
 class Player(PhysicsEntity):
 
