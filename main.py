@@ -40,9 +40,9 @@ class Game:
             'Wall' :load_images('Tiles/Wall'),
             'Goal' : load_images('Tiles/Goal'),
             'Decor' : load_images('Tiles/Decor'),
-            'Temp/Breaking' :Animation(load_images('Tiles/TempAnimations/Breaking')),
-            'Temp/Shaking' :Animation(load_images('Tiles/TempAnimations/Shaking')),
-            'Temp/Broken' :Animation(load_images('Tiles/TempAnimations/Broken'), loop=True),
+            'Temp/Breaking' :Animation(load_images('Tiles/TempAnimations/Breaking'), img_dur=2, loop=False),
+            'Temp/Shaking' :Animation(load_images('Tiles/TempAnimations/Shaking'),img_dur=5),
+            'Temp/Broken' :load_image('Tiles/TempAnimations/Broken/000.png'),
             'Wall' :load_images('Tiles/Wall'),
             'EProjectile' : load_image('Enemies/DarkMage/EEnergy_Ball.png'),
             'EStaff' : load_image('Enemies/DarkMage/EStaff.png'),
@@ -88,11 +88,20 @@ class Game:
     def load_level(self, map_id):
         self.tilemap.load('Maps/' + str(map_id) + '.json')
 
-
+        self.current_level = map_id
 
         self.mana_pickups = []
+        self.mana_respawn_data = {}
+
         for mana in self.tilemap.extract([('Mana', 0)]):
+            mana_rect = pygame.Rect(mana['pos'][0], mana['pos'][1], 16, 16)
             self.mana_pickups.append(pygame.Rect(mana['pos'][0], mana['pos'][1], 16, 16))
+
+            if self.current_level == 2:
+                mana_key = f"{int(mana['pos'][0])};{int(mana['pos'][1])}"
+                self.mana_respawn_data[mana_key] = {'rect' : mana_rect, 'collected' : False, 'respawn_timer' : 0}
+        print(f"Level {self.current_level}: Created {len(self.mana_respawn_data)} mana respawn entries")
+        print(f"Mana respawn data: {self.mana_respawn_data}")
 
         self.goal = []
         for goal in self.tilemap.extract([('Goal', 0)]):
@@ -139,9 +148,11 @@ class Game:
         self.player.dashing = 0
         self.player.dash_cd = 0
 
+    
     def run(self):
         
         while True:
+            
             if self.current_level == 0:
                 self.display.blit(self.assets['background'], (0,0))
             elif self.current_level == 1:
@@ -150,71 +161,74 @@ class Game:
                 self.display.blit(self.assets['castlebackground'], (0,0))
             
 
-            self.scroll[0] += (self.player.rect().centerx - self.display.get_width() / 2 - self.scroll[0]) / 30 #originally 30
+            self.scroll[0] += (self.player.rect().centerx - self.display.get_width() / 2 - self.scroll[0]) / 30 
             self.scroll[1] += (self.player.rect().centery - self.display.get_height() / 2 - self.scroll[1]) / 30
             render_scroll = (int(self.scroll[0]), int(self.scroll[1]))
 
             for loc in list(self.temp_blocks.keys()):  #Temp tiles management
                 block = self.temp_blocks[loc]
+                
                 tile_pos = [int(s) for s in loc.split(';')]
                 block_rect = pygame.Rect(tile_pos[0] * 16, tile_pos[1] * 16, 16, 16)
 
                 if loc in self.temp_blocks_animation:
-                    for anim in self.temp_blocks_animation[loc].values():
-                        anim.update()
+                    for key, anim in self.temp_blocks_animation[loc].items():
+                        if key != 'broken':
+                            anim.update()
 
                 if block['state'] == 'broken':
                     block['respawn_timer'] += 1
                     if block['respawn_timer'] >= 300:
-                        self.tilemap.tilemap[loc] = {'type' : 'Temp', 'variant' : block['original_variant'], 'pos' : tile_pos}
+                        
                         block['state'] = 'solid'
                         block['timer'] = 0
                         block['respawn_timer'] = 0
+                        self.tilemap.tilemap[loc] = {'type' : 'Temp', 'variant' : block['original_variant'], 'pos' : tile_pos}
                         self.temp_blocks_animation[loc]['shaking'] = self.assets['Temp/Shaking'].copy()
                         self.temp_blocks_animation[loc]['breaking'] = self.assets['Temp/Breaking'].copy()
                         self.temp_blocks_animation[loc]['broken'] = self.assets['Temp/Broken'].copy()
                 
-                elif block['state'] in ['solid', 'shaking', 'breaking']:
+                elif block['state'] in ['solid', 'shaking']:
                     #to test if player is on the block
-                    player_on_block = (self.player.rect().colliderect(block_rect) or 
-                                        (abs(self.player.rect().left - block_rect.left) < 16 and  # Horizontally aligned
-                                        self.player.rect().bottom == block_rect.top)  # Touching edges
-                                        ) and self.player.collisions['down']
+                    player_on_block = (self.player.rect().bottom <= block_rect.top + 4 and
+                                        self.player.rect().bottom >= block_rect.top - 4 and
+                                        self.player.rect().right > block_rect.left + 2 and
+                                        self.player.rect().left < block_rect.right - 2 and
+                                        self.player.velocity[1] >= 0
+                                        ) and self.player.collisions['down'] 
 
                     if player_on_block:
-                        print(f"Block {loc}: state={block['state']}, timer={block['timer']}")  # ADD THIS
+                        #print(f"Block {loc}: state={block['state']}, timer={block['timer']}") 
                         
                         if block['state'] == 'solid':
-                            print(f"Changing block {loc} to SHAKING")  # ADD THIS
+                            #print(f"Changing block {loc} to SHAKING") 
                             block['state'] = 'shaking'
                             block['timer'] = 0
                             self.temp_blocks_animation[loc]['shaking'] = self.assets['Temp/Shaking'].copy()
-
+                            
                         elif block['state'] == 'shaking':
                             block['timer'] += 1
-                            if block['timer'] >= 90:
-                                print(f"Changing block {loc} to BREAKING")  # ADD THIS
+                            if block['timer'] >= 35:
+                                #print(f"Changing block {loc} to BREAKING") 
                                 block['state'] = 'breaking'
                                 block['timer'] = 0
                                 self.temp_blocks_animation[loc]['breaking'] = self.assets['Temp/Breaking'].copy()
                         
-                        elif block['state'] == 'breaking':
-                            block['timer'] += 1
-                            if self.temp_blocks_animation[loc]['breaking'].done or block['timer'] >= 30:
-                                print(f"BREAKING block {loc}")  # ADD THIS
-                                if loc in self.tilemap.tilemap:
-                                    del self.tilemap.tilemap[loc]
-                                block['state'] = 'broken'
-                                block['respawn_timer'] = 0
-                                self.temp_blocks_animation[loc]['broken'] = self.assets['Temp/Broken'].copy()
-                    else: #Resetting to normal state if player didn't break it by stepping off early
-                        if block['state'] in ['shaking']:
-                            block['state'] = 'solid'
-                            block['timer'] = 0
+                elif block['state'] == 'breaking':
+                    anim = self.temp_blocks_animation[loc]['breaking']
+                    anim.update()
 
+                    if anim.done:
+                        #print(f"Block {loc} BROKEN → deleting tile")
+                                
+                        if loc in self.tilemap.tilemap:
+                            del self.tilemap.tilemap[loc]
+                        block['state'] = 'broken'
+                        block['respawn_timer'] = 0
 
-            self.clouds.update()
-            self.clouds.render(self.display, offset=render_scroll)
+            if self.current_level == 0:        
+                self.clouds.update()
+                self.clouds.render(self.display, offset=render_scroll)
             self.tilemap.render(self.display, offset=render_scroll)
 
             for loc in self.temp_blocks:
@@ -237,10 +251,9 @@ class Game:
                     self.display.blit(img, (x,y))
 
                 elif block['state'] == 'broken':
-                    anim = self.temp_blocks_animation[loc]['broken']
-                    if not anim.done:
-                        img = anim.img()
-                        self.display.blit(img, (x,y))
+                    img = self.temp_blocks_animation[loc]['broken']
+                    self.display.blit(img,(x,y))
+
 
 
             pulse = abs(math.sin(pygame.time.get_ticks() * 0.003)) * 0.3 + 0.7
@@ -290,13 +303,41 @@ class Game:
             for mana_pickup in self.mana_pickups.copy():
                 if self.player.rect().colliderect(mana_pickup):
                     self.player.collect_mana(self.player.max_obtainable_mana)
-                    self.mana_pickups.remove(mana_pickup)
-
+                    
                     for i in range(10):
                         angle = random.random() * math.pi * 2
                         speed = random.random() * 2
                         self.particles.append(Particle(self, 'ManaAmbience', mana_pickup.center, velocity= [math.cos(angle) * speed, math.sin(angle) * speed], frame= random.randint(0,7)))
-            
+
+                    if self.current_level == 2:
+                        mana_key = f"{int(mana_pickup.x)};{int(mana_pickup.y)}"  # respawn timer mechanic of mana in final stage
+                        if mana_key in self.mana_respawn_data:
+                            self.mana_respawn_data[mana_key]['collected'] = True
+                            self.mana_respawn_data[mana_key]['respawn_timer'] = 0
+                    self.mana_pickups.remove(mana_pickup)
+            if self.current_level == 2:
+                for mana_key, data in self.mana_respawn_data.items():
+                    if data['collected']:
+                        data['respawn_timer'] += 1
+
+                        if data['respawn_timer'] % 60:
+                            print(f"Mana {mana_key}: timer={data['respawn_timer']}/1200")
+                        
+                        if data['respawn_timer'] >= 1200:
+                            print(f"RESPAWNING MANA at {mana_key}") 
+                            data['collected'] = False
+                            data['respawn_timer'] = 0
+
+                            self.mana_pickups.append(data['rect'])
+
+                            for i in range(15):
+                                angle = random.random() * math.pi * 2
+                                speed = random.random() * 1.5
+                                self.particles.append(Particle(self, 'ManaAmbience', data['rect'].center,
+                                    velocity=[math.cos(angle) * speed, math.sin(angle) * speed],
+                                    frame=random.randint(0, 7)))
+
+
             for goal in self.goal:
                 if self.player.rect().colliderect(goal):
 
@@ -328,7 +369,11 @@ class Game:
                 else:
                     img = self.assets['Projectile']
 
-                self.display.blit(img, (projectile[0][0] - img.get_width() / 2 - render_scroll[0], projectile[0][1] - img.get_height() / 2 - render_scroll[1]))
+                should_flip = projectile[1] < 0
+                flipped_img = pygame.transform.flip(img, should_flip, False)
+
+
+                self.display.blit(flipped_img, (projectile[0][0] - img.get_width() / 2 - render_scroll[0], projectile[0][1] - img.get_height() / 2 - render_scroll[1]))
                 if self.tilemap.solid_check(projectile[0]):
                     self.projectiles.remove(projectile)
                     for i in range(4):
@@ -374,10 +419,7 @@ class Game:
                                         angle = random.random() * math.pi * 2
                                         self.sparks.append(Spark(enemy.rect().center, angle, 2 + random.random()))
                                 
-                                break
-
-
-                        
+                                break          
 
             for spark in self.sparks.copy():
                 kill = spark.update()
