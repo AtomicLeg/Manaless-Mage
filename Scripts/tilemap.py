@@ -14,7 +14,7 @@ AUTOTILE_MAP = {
 }
 
 NEIGHBOUR_OFFSETS = [(-1,0),(-1,-1),(0,-1),(1,-1),(1,0),(0,0),(-1,1),(0,1),(1,1)]
-PHYSICS_TILES = {'Grass', 'Stone', 'Halfblock','Temp', 'Wall', 'DropDown'}
+PHYSICS_TILES = {'Grass', 'Stone', 'Halfblock','Temp', 'Wall'}
 AUTOTILE_TYPES = {'Grass', 'Stone', 'Wall', 'Lava'}
 
 class Tilemap:
@@ -78,6 +78,14 @@ class Tilemap:
         for tile in self.tiles_around(pos):
             if tile['type'] in PHYSICS_TILES:
                 rects.append(pygame.Rect(tile['pos'][0] * self.tile_size, tile['pos'][1] * self.tile_size, self.tile_size, self.tile_size))
+        return rects
+    
+    def dropdown_rects_around(self,pos):
+        rects = []
+        for tile in self.tiles_around(pos):
+            if tile['type'] == 'DropDown':
+                rect = pygame.Rect(tile['pos'][0] * self.tile_size, tile['pos'][1] * self.tile_size, self.tile_size, 4)
+                rects.append(rect)
         return rects
     
     def autotile(self):

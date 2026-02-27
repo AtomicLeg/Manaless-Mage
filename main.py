@@ -25,10 +25,10 @@ class Game:
 
         self.clock = pygame.time.Clock()
     
-        self.movement = [False, False] 
+        self.movement = [False, False, False] 
 
         self.assets ={
-            'Grass' : load_images('Tiles/Grass'),
+            'Grass' : load_images('Tiles/Grass'),   
             'Stone' : load_images('Tiles/Stone'),
             'Halfblock' : load_images('Tiles/Halfblock'),
             'Mana' : load_images('Tiles/Mana'),
@@ -100,8 +100,8 @@ class Game:
             if self.current_level == 2:
                 mana_key = f"{int(mana['pos'][0])};{int(mana['pos'][1])}"
                 self.mana_respawn_data[mana_key] = {'rect' : mana_rect, 'collected' : False, 'respawn_timer' : 0}
-        print(f"Level {self.current_level}: Created {len(self.mana_respawn_data)} mana respawn entries")
-        print(f"Mana respawn data: {self.mana_respawn_data}")
+        #print(f"Level {self.current_level}: Created {len(self.mana_respawn_data)} mana respawn entries")
+        #print(f"Mana respawn data: {self.mana_respawn_data}")
 
         self.goal = []
         for goal in self.tilemap.extract([('Goal', 0)]):
@@ -320,11 +320,11 @@ class Game:
                     if data['collected']:
                         data['respawn_timer'] += 1
 
-                        if data['respawn_timer'] % 60:
-                            print(f"Mana {mana_key}: timer={data['respawn_timer']}/1200")
+                        #if data['respawn_timer'] % 60:
+                            #print(f"Mana {mana_key}: timer={data['respawn_timer']}/1200")
                         
                         if data['respawn_timer'] >= 1200:
-                            print(f"RESPAWNING MANA at {mana_key}") 
+                            #print(f"RESPAWNING MANA at {mana_key}") 
                             data['collected'] = False
                             data['respawn_timer'] = 0
 
@@ -449,6 +449,8 @@ class Game:
                         self.movement[1] = True
                     if event.key == pygame.K_UP:
                         self.player.jump()
+                    if event.key == pygame.K_DOWN:
+                        self.movement[2] = True
                     if event.key == pygame.K_x:
                         if not self.player.basic_attack():
                             self.player.attack_fail()
@@ -464,6 +466,8 @@ class Game:
                         self.movement[0] = False
                     if event.key == pygame.K_RIGHT:
                         self.movement[1] = False
+                    if event.key == pygame.K_DOWN:
+                        self.movement[2] = False
 
             if self.boss and self.boss in self.enemies:
                 self.hud.render_boss_health(self.display, self.boss, "DARK MAGE")

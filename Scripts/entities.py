@@ -50,6 +50,16 @@ class PhysicsEntity:
 
         self.pos[1] += frame_movement[1]
         entity_rect = self.rect()
+
+        is_dropping = hasattr(self, 'dropping_through') and self.dropping_through > 0
+        if frame_movement[1] > 0 and not is_dropping:
+            for rect in tilemap.dropdown_rects_around(self.pos):
+                if entity_rect.colliderect(rect):
+                    if entity_rect.bottom - frame_movement[1] <= rect.top + 2:
+                        entity_rect.bottom = rect.top
+                        self.collisions['down'] = True
+                        self.pos[1] = entity_rect.y
+
         for rect in tilemap.physics_rects_around(self.pos):
             if entity_rect.colliderect(rect):
                 if frame_movement[1] > 0:
@@ -240,6 +250,8 @@ class Player(PhysicsEntity):
         self.dashing = 0
         self.dash_cd = 0
 
+        self.dropping_through = 0
+
     def take_damage(self, amount):
         if self.invincibility > 0 or self.dead:
             return False
@@ -298,6 +310,7 @@ class Player(PhysicsEntity):
         if self.attacking > 0:
             return False
         
+
         if self.wall_slide:
             if self.flip and self.last_movement[0] < 0:
                 self.velocity[0] = 3.5
@@ -387,8 +400,23 @@ class Player(PhysicsEntity):
             else:
                 self.dashing = min(0, self.dashing + 1)
             
-            
+        if self.dropping_through > 0:
+            self.dropping_through -= 1    
 
+        if self.game.movement[2] and self.collisions['down'] and self.dropping_through == 0:
+            on_dropdown = False
+            player_bottom_rect = pygame.Rect(self.rect().x, self.rect().bottom, self.rect().width, 4)
+
+            for rect in self.game.tilemap.dropdown_rects_around(self.pos):
+                if player_bottom_rect.colliderect(rect):
+                    on_dropdown = True
+                    break
+            if on_dropdown and self.collisions['down']:
+                self.dropping_through = 10
+                self.pos[1] += 8
+                self.velocity[1] = 1
+                
+            
         if self.attacking > 0:
             movement = (0,0)
 
