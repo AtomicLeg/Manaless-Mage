@@ -65,9 +65,10 @@ class Game:
             'Flamemite/idle' : Animation(load_images('Enemies/Flame_mite/idle'), img_dur=6), #Nuke this folder if useless
             'Flamemite/attack' : Animation(load_images('Enemies/Flame_mite/Attack')),
             'Flamemite/walk' : Animation(load_images('Enemies/Flame_mite/Walk'), img_dur=4),
-            'DarkMage/EStaffattack' : Animation(load_images('Enemies/DarkMage/Attack'),img_dur=6),
+            'DarkMage/attack' : Animation(load_images('Enemies/DarkMage/Attack'),img_dur=6),
             'DarkMage/walk' : Animation(load_images('Enemies/DarkMage/Walk'), img_dur=4),
             'DarkMage/idle' : Animation(load_images('Enemies/DarkMage/idle'), img_dur=4),
+            'DarkMage/jump' : Animation(load_images('Enemies/DarkMage/Jump')),
             'Projectile' : load_image('Character/Energy_Ball.png'),
             'Charged_Projectile' : load_image('Character/MAXENERGYBALL.png'),
         }
@@ -83,7 +84,16 @@ class Game:
 
         self.hud = HUD(self)
         
-        
+        self.victory = False
+        self.victory_timer = 0
+        self.victory_dance_timer = 0
+        self.victory_dance_dir = 1
+        self.victory_stars = [
+            [random.randint(0, 320), random.randint(0, 240),
+             random.uniform(-0.4, 0.4), random.uniform(-0.3, 0.3),
+             random.randint(0, 90), random.randint(60, 100)]
+            for _ in range(20)
+        ]
 
     def load_level(self, map_id):
         self.tilemap.load('Maps/' + str(map_id) + '.json')
@@ -148,10 +158,97 @@ class Game:
         self.player.dashing = 0
         self.player.dash_cd = 0
 
+    def render_victory_screen(self):
+        t = self.victory_timer
+
+        bg = pygame.transform.scale(self.assets['background'], self.display.get_size())
+        self.display.blit(bg, (0, 0))
+
+        fade_alpha = min(150, int(t * 2.3))
+        overlay = pygame.Surface(self.display.get_size(), pygame.SRCALPHA)
+        overlay.fill((8, 0, 25, fade_alpha))
+        self.display.blit(overlay, (0, 0))
+
+        for star in self.victory_stars:
+            star[0] = (star[0] + star[2]) % 320
+            star[1] = (star[1] + star[3]) % 240
+            star[4] += 1
+            if star[4] >= star[5]:
+                star[4] = 0
+                star[0] = random.randint(0, 320)
+                star[1] = random.randint(0, 240)
+            life_frac = star[4] / star[5]
+            alpha = int(220 * math.sin(life_frac * math.pi))
+            r = max(1, int(1.5 + math.sin(t * 0.05 + star[0] * 0.1)))
+            star_surf = pygame.Surface((r * 2 + 1, r * 2 + 1), pygame.SRCALPHA)
+            pygame.draw.circle(star_surf, (255, 215, 110, alpha), (r, r), r)
+            self.display.blit(star_surf, (int(star[0]) - r, int(star[1]) - r))
+
+        self.victory_dance_timer += 1
+        if self.victory_dance_timer % 30 == 0:
+            self.victory_dance_dir *= -1
+            self.player.flip = (self.victory_dance_dir < 0)
+
+        dance_x = 160 + math.sin(t * 0.10) * 14
+        dance_y = 162 + abs(math.sin(t * 0.20)) * -7   
+
+        self.player.set_action('idle')
+        self.player.animation.update()
+        player_img = pygame.transform.flip(self.player.animation.img(), self.player.flip, False)
+        scale = 2
+        player_big = pygame.transform.scale(player_img,
+            (player_img.get_width() * scale, player_img.get_height() * scale))
+        self.display.blit(player_big,
+            (int(dance_x) - player_big.get_width() // 2,
+             int(dance_y) - player_big.get_height() // 2))
+
+        font_big   = pygame.font.SysFont('Arial', 22, bold=True)
+        font_med   = pygame.font.SysFont('Arial', 11)
+        font_small = pygame.font.SysFont('Arial', 9)
+
+        title_alpha = min(255, int(t * 4.5))
+        glow = int(210 + 45 * math.sin(t * 0.08))
+        title_surf = font_big.render("You Win!", True, (255, glow, 90))
+        title_surf.set_alpha(title_alpha)
+        self.display.blit(title_surf,
+            (self.display.get_width() // 2 - title_surf.get_width() // 2, 28))
+
+        if t > 45:
+            sub_alpha = min(255, int((t - 45) * 5))
+            sub_surf = font_med.render("The Dark Mage has been defeated!", True, (195, 170, 255))
+            sub_surf.set_alpha(sub_alpha)
+            self.display.blit(sub_surf,
+                (self.display.get_width() // 2 - sub_surf.get_width() // 2, 57))
+
+        if t > 100:
+            blink = int(160 + 95 * abs(math.sin(t * 0.08)))
+            prompt_surf = font_small.render("Press ENTER to play again", True, (blink, blink, blink))
+            self.display.blit(prompt_surf,
+                (self.display.get_width() // 2 - prompt_surf.get_width() // 2, 222))
+
     
     def run(self):
-        
         while True:
+
+            if self.victory:
+                self.victory_timer += 1
+                self.render_victory_screen()
+
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        pygame.quit()
+                        sys.exit()
+                    if event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_RETURN and self.victory_timer > 100:
+                            self.victory = False
+                            self.victory_timer = 0
+                            self.victory_dance_timer = 0
+                            self.load_level(0)
+
+                self.screen.blit(pygame.transform.scale(self.display, self.screen.get_size()), (0, 0))
+                pygame.display.update()
+                self.clock.tick(60)
+                continue            
             
             if self.current_level == 0:
                 self.display.blit(self.assets['background'], (0,0))
@@ -401,11 +498,21 @@ class Game:
                         for enemy in self.enemies.copy():
                             if enemy.rect().colliderect(proj_rect):
                                 damage = projectile[3] if len(projectile) > 3 else 25
+                                projectile_type = projectile[4] if len(projectile) > 4 else 'player_basic'
+
+                                if enemy == self.boss and projectile_type != 'player_strong':
+                                    self.projectiles.remove(projectile)
+                                    for i in range(6):
+                                        angle = random.random() * math.pi * 2
+                                        self.sparks.append(Spark(enemy.rect().center, angle, 1 + random.random()))
+                                    break
+
                                 enemy.health -= damage
 
                                 self.projectiles.remove(projectile)
 
-                                for i in range(8):
+                                spark_count = 12 if enemy == self.boss else 8
+                                for i in range(spark_count):
                                     angle = random.random() * math.pi * 2
                                     self.sparks.append(Spark(enemy.rect().center, angle, random.random()))
 
@@ -414,6 +521,10 @@ class Game:
                                     self.enemies.remove(enemy)
                                     if enemy == self.boss:
                                         self.boss = None
+                                        self.victory = True
+                                        self.victory_timer = 0
+                                        self.victory_dance_timer = 0
+                                        self.movement = [False, False, False]
 
                                     for i in range(20):
                                         angle = random.random() * math.pi * 2

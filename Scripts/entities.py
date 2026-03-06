@@ -34,7 +34,6 @@ class PhysicsEntity:
         self.collisions = {"up" : False, "down": False, "right": False, "left": False}
         frame_movement = (movement[0] + self.velocity[0], movement[1] + self.velocity[1])
 
-        self.velocity[1] = min(5, self.velocity[1] + 0.1)
 
         self.pos[0] += frame_movement[0]
         entity_rect = self.rect()
@@ -76,8 +75,8 @@ class PhysicsEntity:
             self.flip = True
 
         self.last_movement = movement
-                
-        self.velocity[1] = min(5, self.velocity[1] + 0.1)
+        if not (hasattr(self, 'dashing') and self.dashing != 0):        
+            self.velocity[1] = min(5, self.velocity[1] + 0.15)
 
         if self.collisions["down"] or self.collisions["up"]: 
             self.velocity[1] = 0
@@ -161,7 +160,7 @@ class Flamemite(PhysicsEntity):
 
                     for i in range(6):
                         self.game.sparks.append(Spark(self.game.projectiles[-1][0], random.random() - 0.5 + (math.pi if self.flip else 0), 2 + random.random()))
-                        self.attack_cooldown = 90
+                        self.attack_cooldown = 180
 
         elif random.random() < 0.01:
             self.walking = random.randint(30,120)
@@ -183,45 +182,127 @@ class DarkMage(PhysicsEntity):
         self.walking = 0
         self.health = 400
 
+        self.chase_active = False
+        self.target_direction = 0 # -1 if left 0 is neutral and 1 is right
+        self.jump_cooldown = 0
+        self.stuck_timer = 0
+        self.last_pos = list(pos)
+        self.attack_timer = 0   
+        self.jumps_remaining = 3 
+
     def die(self):
         for i in range(40):
             angle = random.random() * math.pi * 2
             self.game.sparks.append(Spark(self.rect().center, angle, 3 + random.random() * 2))
+
+    def should_jump(self, tilemap):
+        check_x = 8 if not self.flip else -8
+        wall_ahead = tilemap.solid_check((self.rect().centerx + check_x, self.pos[1] + 8))
+
+        ground_ahead = tilemap.solid_check((self.rect().centerx + check_x, self.pos[1] + 24))
+
+        hazard_ahead = self.check_hazard_ahead(tilemap)
+
+        return (wall_ahead or not ground_ahead or hazard_ahead) and self.collisions['down']
+
+    def check_hazard_ahead(self, tilemap):
+        check_x = 16 if not self.flip else -16
+        tile_x = int((self.rect().centerx + check_x) // 16)
+        tile_y = int((self.rect().centery + 8) // 16)
+        tile_loc = f"{tile_x};{tile_y}"
+        
+        if tile_loc in tilemap.tilemap:
+            tile = tilemap.tilemap[tile_loc]
+            return tile['type'] in ['Lava', 'Hazards']
+        return False    
     
+
+
     def update(self, tilemap, movement =(0,0)):
-        if self.walking:
-            if tilemap.solid_check((self.rect().centerx + (-7 if self.flip else 7),self.pos[1] + 23)):
-                if (self.collisions['right'] or self.collisions['left']):
-                    self.flip = not self.flip
-                else:
-                    movement = (movement[0] - 0.5 if self.flip else 0.5, movement[1])
+
+        if self.attack_timer > 0:
+            self.attack_timer -= 1
+
+        dis = (self.game.player.pos[0] - self.pos[0], self.game.player.pos[1] - self.pos[1])
+        distance = math.sqrt(dis[0]**2 + dis[1]**2)
+
+        self.chase_active = distance < 320 #320 pixels
+        
+        if self.jump_cooldown > 0:
+            self.jump_cooldown -= 1
+
+        if self.collisions['down']:
+            self.jumps_remaining = 3
+
+        if abs(self.pos[0] - self.last_pos[0]) < 0.05:
+            self.stuck_timer += 1
+        else: 
+            self.stuck_timer = 0 
+        self.last_pos = list(self.pos)
+
+        if self.stuck_timer > 30 and self.jump_cooldown == 0 and self.jumps_remaining > 0:
+            self.velocity[1] = -3
+            self.jump_cooldown = 30
+            self.stuck_timer = 0
+            self.jumps_remaining -= 1
+
+        if self.chase_active:
+            if dis[0] > 10:
+                self.target_direction = 1
+                self.flip = False
+            elif dis[0] < -10:
+                self.target_direction = -1
+                self.flip = True
             else:
-                self.flip = not self.flip
-            self.walking = max(0, self.walking - 1)
+                self.target_direction = 0
 
-            if not self.walking:
-                dis = (self.game.player.pos[0] - self.pos[0], self.game.player.pos[1] - self.pos[1])    
-                if (abs(dis[1])<48):   #48 pixels distance is taken  
-                    if (self.flip and dis[0] < 0):
-                        self.game.projectiles.append([[self.rect().centerx - 7, self.rect().centery], -1.5, 0, 15, 'darkmage'])
-                        for i in range(4):
-                            self.game.sparks.append(Spark(self.game.projectiles[-1][0], random.random() - 0.5 + math.pi, 2 + random.random()))
+            if self.target_direction != 0 and self.attack_timer == 0:
+                movement = (self.target_direction * 0.7, movement[1])
 
-                    if (not self.flip and dis[0] > 0):
-                        self.game.projectiles.append([[self.rect().centerx + 7, self.rect().centery], 1.5, 0, 15, 'darkmage'])
-                        for i in range(4):
-                            self.game.sparks.append(Spark(self.game.projectiles[-1][0], random.random() - 0.5 , 2 + random.random()))
+                if self.should_jump(tilemap) and self.jump_cooldown == 0:
+                    self.velocity[1] = -3
+                    self.jump_cooldown = 30
+                    self.jumps_remaining -= 1
+                    
 
-        elif random.random() < 0.01:
-            self.walking = random.randint(30,120)
+            if abs(dis[1]) < 48 and abs(dis[0]) < 200 and self.attack_timer == 0:
+                if random.random() < 0.02:
 
+                    self.attack_timer = 36
+                    self.set_action('attack')
 
-        super().update(tilemap, movement=movement) 
+                    direction = 1.5 if not self.flip else -1.5
+                    offset = 7 if not self.flip else -7
+                    self.game.projectiles.append([[self.rect().centerx + offset, self.rect().centery], direction, 0, 15, 'darkmage'])
 
-        if movement[0] != 0:
+                    for i in range(4):
+                        angle_offset = random.random() - 0.5
+                        angle = (0 if not self.flip else math.pi) + angle_offset
+                        self.game.sparks.append(Spark([self.rect().centerx + offset, self.rect().centery], angle, 2 + random.random()))
+        else:
+            if self.walking:
+                if tilemap.solid_check((self.rect().centerx + (-7 if self.flip else 7), self.pos[1] + 23)):
+                    if self.collisions['right'] or self.collisions['left']:
+                        self.flip = not self.flip
+                    else:
+                        movement = (movement[0] - 0.5 if self.flip else 0.5, movement[1])
+                else:
+                    self.flip = not self.flip
+                self.walking = max(0, self.walking - 1)
+            elif random.random() < 0.01:
+                self.walking = random.randint(30, 120)
+
+        super().update(tilemap, movement=movement)
+
+        if self.attack_timer > 0:
+            pass
+
+        elif self.velocity[1] < -1:
+            self.set_action('jump')
+        elif movement[0] != 0:
             self.set_action('walk')
         else:
-            self.set_action('idle')   
+            self.set_action('idle')
 
 
 class Player(PhysicsEntity):
@@ -307,32 +388,32 @@ class Player(PhysicsEntity):
 
     def jump(self):
 
-        if self.attacking > 0:
+        if self.attacking > 0 or self.dashing != 0:
             return False
         
 
         if self.wall_slide:
             if self.flip and self.last_movement[0] < 0:
                 self.velocity[0] = 3.5
-                self.velocity[1] = -5.0
+                self.velocity[1] = -2.5
                 self.air_time = 5
                 self.jumps = max(0, self.jumps -1)
                 return True
             elif not self.flip and self.last_movement[0] > 0:
                 self.velocity[0] = -3.5
-                self.velocity[1] = -5.0
+                self.velocity[1] = -2.5
                 self.air_time = 5
                 self.jumps = max(0, self.jumps -1)
                 return True
 
         elif self.jumps:
-            self.velocity[1] = -4
+            self.velocity[1] = -3
             self.jumps -= 1
             self.air_time = 5
             return True
         
     def basic_attack(self):
-        if self.attacking <= 0 and self.can_cast(self.b_attack_cost):
+        if self.attacking <= 0 and self.can_cast(self.b_attack_cost) and self.dashing == 0:
             self.use_mana(self.b_attack_cost)
             
             self.set_action('Staffattack')
@@ -354,7 +435,7 @@ class Player(PhysicsEntity):
         return False
     
     def strong_attack(self):
-        if self.attacking <= 0 and self.can_cast(self.C_attack_cost):
+        if self.attacking <= 0 and self.can_cast(self.C_attack_cost) and self.dashing == 0:
             self.use_mana(self.C_attack_cost)
 
             self.set_action('Staffattack')
@@ -376,7 +457,7 @@ class Player(PhysicsEntity):
         return False
     
     def attack_fail(self):
-        if self.attacking <= 0:
+        if self.attacking <= 0 and self.dashing == 0:
             self.set_action('Failattack')
 
             staff_pos = [self.rect().centerx + (-7 if self.flip else 7), self.rect().centery]
@@ -399,6 +480,15 @@ class Player(PhysicsEntity):
                 self.dashing = max(0, self.dashing - 1)
             else:
                 self.dashing = min(0, self.dashing + 1)
+
+            super().update(tilemap, movement=movement)
+            
+            if self.collisions['right'] or self.collisions['left']:
+                self.dashing = 0
+                self.velocity[0] = 0
+
+            self.animation.update()
+            return
             
         if self.dropping_through > 0:
             self.dropping_through -= 1    
@@ -474,18 +564,3 @@ class Player(PhysicsEntity):
             return
 
         super().render(surf, offset = offset)
-
-        
-
-
-            
-
-
-
-
-
-
-
-
-    
-    

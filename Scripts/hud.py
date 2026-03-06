@@ -84,14 +84,10 @@ class HUD:
     def render(self, surf):
         
         player = self.game.player
-        
-        
         x = self.padding_x + 20  # Leave space for labels
         y = self.padding_y
         
-        
         self.draw_bar(surf, x, y, player.hp, player.max_hp, self.hp_bar_color, self.hp_bg_color, "HP")
-        
         y += self.bar_height + self.bar_spacing
         self.draw_bar(surf, x, y, player.mana, player.max_mana, self.mana_bar_color, self.mana_bg_color, "MP")
         
@@ -108,15 +104,26 @@ class HUD:
     
     def render_boss_health(self, surf, enemy, boss_name="Dark Mage"):
         
-        boss_bar_width = 150
-        boss_bar_height = 10
+        boss_bar_width = 160
+        boss_bar_height = 12
+        margin_bottom = 30
         
-        x = (surf.get_width() - boss_bar_width) // 2
-        y = 20
+        sw = surf.get_width()
+        sh = surf.get_height()
+        x = (sw - boss_bar_width) // 2
+        y = sh - margin_bottom - boss_bar_height
+
+        panel_pad = 6
+        panel_rect = pygame.Rect(x - panel_pad, y - 18 - panel_pad, boss_bar_width + panel_pad * 2,boss_bar_height + 18 + panel_pad * 2)
+        panel_surf = pygame.Surface((panel_rect.width, panel_rect.height))
+        panel_surf.set_alpha(180)
+        panel_surf.fill((10, 0, 20))
+        surf.blit(panel_surf, (panel_rect.x, panel_rect.y))
+        pygame.draw.rect(surf, (180, 0, 180), panel_rect, 1)
         
-        name_surf = self.large_font.render(boss_name, False, self.text_color)
+        name_surf = self.large_font.render(boss_name, False, (255, 80, 255))
         name_x = x + (boss_bar_width - name_surf.get_width()) // 2
-        name_y = y - 14
+        name_y = y - name_surf.get_height() - 2
         
         shadow_surf = self.large_font.render(boss_name, False, self.shadow_color)
         surf.blit(shadow_surf, (name_x + 1, name_y + 1))
@@ -127,12 +134,14 @@ class HUD:
         fill_width = int(boss_bar_width * percentage)
         
         bg_rect = pygame.Rect(x, y, boss_bar_width, boss_bar_height)
-        pygame.draw.rect(surf, self.hp_bg_color, bg_rect)
+        pygame.draw.rect(surf, (60, 10, 10), bg_rect)
         
         if fill_width > 0:
             fill_rect = pygame.Rect(x, y, fill_width, boss_bar_height)
-            boss_color = (255, 100, 100)  
-            pygame.draw.rect(surf, boss_color, fill_rect)
+            r = int(255)
+            g = int(max(0, 80 * percentage))
+            pygame.draw.rect(surf, (r, g, 60), fill_rect)
+            pygame.draw.rect(surf, (255, min(255, g + 80), 120), pygame.Rect(x, y, fill_width, 3))
         
         pygame.draw.rect(surf, self.border_color, bg_rect, 2)
         
