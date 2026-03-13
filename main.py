@@ -18,7 +18,7 @@ class Game:
     def __init__(self):
         pygame.init()
 
-        pygame.display.set_caption("Platformer Project Fall") #1. name of window 2. you can change the icon of the app too (look into it)
+        pygame.display.set_caption("Manaless Mage") 
         self.screen = pygame.display.set_mode((640, 480))
 
         self.display = pygame.Surface((320,240))
@@ -75,7 +75,7 @@ class Game:
 
         self.clouds = Clouds(self.assets['clouds'], count=16)
 
-        self.player = Player(self, (50,50), (8,16))  #Check if it needs further updating!!!
+        self.player = Player(self, (50,50), (8,16))  
 
         self.tilemap = Tilemap(self,tile_size= 16)  #16x16 pixel rendering
 
@@ -110,8 +110,7 @@ class Game:
             if self.current_level == 2:
                 mana_key = f"{int(mana['pos'][0])};{int(mana['pos'][1])}"
                 self.mana_respawn_data[mana_key] = {'rect' : mana_rect, 'collected' : False, 'respawn_timer' : 0}
-        #print(f"Level {self.current_level}: Created {len(self.mana_respawn_data)} mana respawn entries")
-        #print(f"Mana respawn data: {self.mana_respawn_data}")
+        
 
         self.goal = []
         for goal in self.tilemap.extract([('Goal', 0)]):
