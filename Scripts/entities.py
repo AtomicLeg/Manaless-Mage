@@ -94,6 +94,9 @@ class Slime(PhysicsEntity):
 
         self.walking = 0
         self.health = 50
+        self.aggro_radius = 80
+        self.aggro  = False
+
 
     def die(self):
         for i in range(15):
@@ -101,17 +104,30 @@ class Slime(PhysicsEntity):
             self.game.sparks.append(Spark(self.rect().center, angle, 2 + random.random()))
 
     def update(self, tilemap, movement =(0,0)):
-        if self.walking:
-            if tilemap.solid_check((self.rect().centerx + (-7 if self.flip else 7),self.pos[1] + 23)):
-                if (self.collisions['right'] or self.collisions['left']):
-                    self.flip = not self.flip
+        dis = (self.game.player.pos[0] - self.pos[0], self.game.player.pos[1] - self.pos[1])
+        distance = math.sqrt(dis[0]**2 + dis[1]**2)            
+        self.aggro = distance <= self.aggro_radius
+        if self.aggro:
+            check_pos = (self.rect().centerx + (7 if dis[0] > 0 else -7), self.pos[1] + 23)
+            if tilemap.solid_check(check_pos):
+                if dis[0] > 4:
+                    movement = (0.5, movement[1])
+                    self.flip = False
+                if dis[0] < -4:
+                    movement = (-0.5, movement[1])
+                    self.flip = True
+        else:
+            if self.walking:
+                if tilemap.solid_check((self.rect().centerx + (-7 if self.flip else 7),self.pos[1] + 23)):
+                    if (self.collisions['right'] or self.collisions['left']):
+                        self.flip = not self.flip
+                    else:
+                        movement = (movement[0] - 0.5 if self.flip else 0.5, movement[1])
                 else:
-                    movement = (movement[0] - 0.5 if self.flip else 0.5, movement[1])
-            else:
-                self.flip = not self.flip
-            self.walking = max(0, self.walking - 1)
-        elif random.random() < 0.01:
-            self.walking = random.randint(30,120)
+                    self.flip = not self.flip
+                self.walking = max(0, self.walking - 1)
+            elif random.random() < 0.01:
+                self.walking = random.randint(30,120)
         
 
         super().update(tilemap, movement=movement) 
@@ -130,6 +146,8 @@ class Flamemite(PhysicsEntity):
         self.walking = 0
         self.health = 50
         self.attack_cooldown = 0
+        self.aggro_radius = 120
+        self.aggro  = False
 
     def die(self):
         for i in range(25):
@@ -138,33 +156,37 @@ class Flamemite(PhysicsEntity):
             self.game.sparks.append(Spark(self.rect().center, angle, 3 + random.random()))
 
     def update(self, tilemap, movement =(0,0)):
+        
+        dis = (self.game.player.pos[0] - self.pos[0], self.game.player.pos[1] - self.pos[1])
+        distance = math.sqrt(dis[0]**2 + dis[1]**2)
+        self.aggro = distance <= self.aggro_radius
 
         if self.attack_cooldown > 0:
             self.attack_cooldown -= 1
 
-        if self.walking:
-            if tilemap.solid_check((self.rect().centerx + (-7 if self.flip else 7),self.pos[1] + 23)):
-                if (self.collisions['right'] or self.collisions['left']):
-                    self.flip = not self.flip
+        if not self.aggro:
+            if self.walking:
+                if tilemap.solid_check((self.rect().centerx + (-7 if self.flip else 7),self.pos[1] + 23)):
+                    if (self.collisions['right'] or self.collisions['left']):
+                        self.flip = not self.flip
+                    else:
+                        movement = (movement[0] - 0.5 if self.flip else 0.5, movement[1])
                 else:
-                    movement = (movement[0] - 0.5 if self.flip else 0.5, movement[1])
-            else:
-                self.flip = not self.flip
-            self.walking = max(0, self.walking - 1)
+                    self.flip = not self.flip
+                self.walking = max(0, self.walking - 1)
 
-            if not self.walking and self.attack_cooldown <=0:
-                dis = (self.game.player.pos[0] - self.pos[0], self.game.player.pos[1] - self.pos[1])
-                if abs(dis[1]) < 48 and abs(dis[0]) < 100:
-                    direction = -2.0 if self.flip else 2.0
-                    self.game.projectiles.append([[self.rect().centerx + (-7 if self.flip else 7), self.rect().centery], direction, 0, 20, 'flamemite'])
+            elif random.random() < 0.01:
+                self.walking = random.randint(30,120)
 
-                    for i in range(6):
-                        self.game.sparks.append(Spark(self.game.projectiles[-1][0], random.random() - 0.5 + (math.pi if self.flip else 0), 2 + random.random()))
-                        self.attack_cooldown = 180
+        if self.aggro and self.attack_cooldown <=0:
+            self.flip = dis[0] < 0
+            if abs(dis[1]) < 48 and abs(dis[0]) < 100:
+                direction = -2.0 if self.flip else 2.0
+                self.game.projectiles.append([[self.rect().centerx + (-7 if self.flip else 7), self.rect().centery], direction, 0, 20, 'flamemite'])
 
-        elif random.random() < 0.01:
-            self.walking = random.randint(30,120)
-
+                for i in range(6):
+                    self.game.sparks.append(Spark(self.game.projectiles[-1][0], random.random() - 0.5 + (math.pi if self.flip else 0), 2 + random.random()))
+                self.attack_cooldown = 180
 
         super().update(tilemap, movement=movement) 
 
@@ -375,9 +397,9 @@ class Player(PhysicsEntity):
         
         if self.dash_cd <= 0 and self.dashing == 0:
             if self.flip:
-                self.dashing = -45
+                self.dashing = -30
             else :
-                self.dashing = 45
+                self.dashing = 30
 
             self.dash_cd = 120
 
@@ -473,8 +495,9 @@ class Player(PhysicsEntity):
 
         if self.dashing != 0:
             movement= (0,0)
+            self.velocity[1] = 0
             dash_speed = 0.8 if self.dashing > 0 else -0.8
-            self.velocity[0] = dash_speed * abs(self.dashing) / 15
+            self.velocity[0] = dash_speed * abs(self.dashing) / 7
 
             if self.dashing > 0:
                 self.dashing = max(0, self.dashing - 1)
